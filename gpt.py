@@ -1,28 +1,81 @@
-import openai
+import datetime
+import json
 
-# 初始化 OpenAI API 客户端
-openai.api_key = ""
-# 定义一个函数生成 ChatGPT 的回复
-def generate_response(prompt):
-    # 调用 OpenAI API 生成回复
-    completions = openai.Completion.create(
-        engine="text-davinci-003",  # 指定使用的引擎名称
-        prompt=prompt,  # API 请求的提示信息
-        max_tokens=1024,  # API 响应的最大令牌数
-        n=1,  # API 请求的完成数
-        stop=None,  # API 响应的终止标志
-        temperature=0.5,  # API 请求的温度参数
-    )
+import requests
+from loadconfig import url, key
 
-    # 从 API 响应中取得回复
-    message = completions.choices[0].text
-    return message
-def ChatGPT_AI_DrawBot(prompt):
-        response = openai.Image.create(
-          prompt=prompt,
-          n=1,
-          size="512x512"
-        )
-        image_url = response['data'][0]['url']
-        return image_url
 
+class gpt:
+
+    def __init__(self):
+        self.messages = []
+
+    def getmodel(self):
+        head = {
+            "Authorization": f'Bearer {key()}'
+        }
+        response = requests.get(url() + "/models", headers=head)
+        if response.status_code != 200:
+            return json.loads(response.text)
+        elif response.status_code == 200:
+            return json.loads(response.text)
+
+    def msg(self, role, content):
+        messages = {
+            "role": role,
+            "content": content
+        }
+        self.messages.append(messages)
+
+    def completion(self, content):
+        self.msg("user", content)
+        data = {
+            "model": "gpt-3.5-turbo",
+            "messages": self.messages,
+            "temperature": 1,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f'Bearer {key()}'
+        }
+        response = requests.post(url() + "/chat/completions", headers=headers, json=data)
+        if response.status_code != 200:
+            return json.loads(response.text)
+        elif response.status_code == 200:
+            answer = json.loads(response.text)['choices'][0]['message']['content']
+            self.msg("system", answer)
+            return answer
+
+    def draw(self, content):
+        data = {
+            "prompt": content,
+            "n": 1,
+            "size": "1024x1024"
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f'Bearer {key()}'
+        }
+        response = requests.post(url() + "/images/generations", headers=headers, json=data)
+        if response.status_code != 200:
+            return json.loads(response.text)
+        elif response.status_code == 200:
+            answer = json.loads(response.text)['data'][0]['url']
+            return answer
+
+    def keyinfo(self):
+        apikey = key()
+        subscription_url = url() + "/dashboard/billing/subscription"
+        headers = {
+            "Authorization": "Bearer " + apikey,
+            "Content-Type": "application/json"
+        }
+        subscription_response = requests.get(subscription_url, headers=headers)
+        if subscription_response.status_code == 200:
+            data = subscription_response.json()
+            total = data.get("hard_limit_usd")
+            access_until = data.get("access_until")
+            print("账户额度:" + str(total))
+            print("有效期:" + datetime.datetime.fromtimestamp(access_until).strftime('%Y-%m-%d %H:%M:%S'))
+        else:
+            print(subscription_response.text)

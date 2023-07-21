@@ -3,9 +3,9 @@ import streamlit as st
 
 import msg
 from bilibili import newmsg
-from gpt import ChatGPT_AI_DrawBot, generate_response
+import gpt
 import re
-
+import loadconfig
 
 def extract_content(input_str):
     pattern = r'^画(.+)$'
@@ -16,6 +16,11 @@ def extract_content(input_str):
 
 async def getmsg(roomid):
     while True:
+        try:
+            if st.session_state.connected:
+                pass
+        except:
+            break
         global data
         newmsgdata= newmsg(roomid, data.lastid())
         data.add(newmsgdata)
@@ -25,26 +30,30 @@ async def getmsg(roomid):
         else:
             await asyncio.sleep(5)
 
-
 async def AI():
     global data, lable
-    context = ""
-    while True:
-        while data.head != None:
+    GPT=gpt.gpt()
+    GPT.keyinfo()
+    run=True
+    while run:
+        while data.head != None and run==True:
+            try:
+                if st.session_state.connected:
+                    pass
+            except:
+                run=False
+                break
             label.table(data.todict())
             user_input = data.head.msg.text
             user = st.empty()
             user.info(data.head.msg.uname + "：" + data.head.msg.text)
             ai = st.empty()
-            context = context + user_input + "\n"
-
             if extract_content(user_input) != None:
-                response = ChatGPT_AI_DrawBot(extract_content(user_input))
+                response = GPT.draw(extract_content(user_input))
                 ai.image(response)
             else:
-                response = generate_response(context)
+                response = GPT.completion(user_input)
                 ai.success("AI：" + response)
-            context = context + response + "\n"
             data.head = data.head.next
             await asyncio.sleep(10)
             while data.head == None:
@@ -58,14 +67,13 @@ async def main():
     data = msg.msgList()
     data.head = None
     st.sidebar.title("人工智障")
-    st.sidebar.info("使用说明：")
-    st.sidebar.info("#开头的消息会被回复 例如：#你是谁")
-    st.sidebar.info("#画开头的消息会被画出来 例如：#画一只猫")
+    st.sidebar.success("使用说明:\n\n#开头的消息会被回复 例如：#你是谁\n\n#画开头的消息会被画出来 例如：#画一只猫")
 
-    roomid = st.sidebar.number_input("roomid", min_value=0, max_value=100000000)
+    roomid = st.sidebar.number_input("roomid", min_value=0, max_value=100000000,value=loadconfig.roomid())
     button = st.sidebar.button("start")
     label = st.sidebar.table()
     if button:
+        st.session_state.connected = True
         task=asyncio.create_task(getmsg(roomid))
         task2=asyncio.create_task(AI())
         await task
