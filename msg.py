@@ -56,8 +56,10 @@ class msgList(object):
         p=self.head
         l=[]
         while p!=None:
-            l.append(p.msg.__dict__)
+            text=p.msg.text
+            uname=p.msg.uname
+            data={"text":text,"uname":uname}
+            l.append(data)
             p=p.next
         return l
-
 
