@@ -1,7 +1,7 @@
 import datetime
 import json
-
-import requests
+import aiohttp
+import asyncio
 from loadconfig import url, key
 
 
@@ -10,25 +10,27 @@ class gpt:
     def __init__(self):
         self.messages = []
 
-    def getmodel(self):
+    async def fetch(self, session, url, headers=None, data=None, method='GET'):
+        async with session.request(method, url, headers=headers, json=data) as response:
+            return await response.json()
+
+    async def getmodel(self):
         head = {
             "Authorization": f'Bearer {key()}'
         }
-        response = requests.get(url() + "/models", headers=head)
-        if response.status_code != 200:
-            return json.loads(response.text)
-        elif response.status_code == 200:
-            return json.loads(response.text)
+        async with aiohttp.ClientSession() as session:
+            response = await self.fetch(session, url() + "/models", headers=head)
+            return response
 
-    def msg(self, role, content):
+    async def msg(self, role, content):
         messages = {
             "role": role,
             "content": content
         }
         self.messages.append(messages)
 
-    def completion(self, content):
-        self.msg("user", content)
+    async def completion(self, content):
+        await self.msg("user", content)
         data = {
             "model": "gpt-3.5-turbo",
             "messages": self.messages,
@@ -38,15 +40,16 @@ class gpt:
             "Content-Type": "application/json",
             "Authorization": f'Bearer {key()}'
         }
-        response = requests.post(url() + "/chat/completions", headers=headers, json=data)
-        if response.status_code != 200:
-            return json.loads(response.text)
-        elif response.status_code == 200:
-            answer = json.loads(response.text)['choices'][0]['message']['content']
-            self.msg("system", answer)
-            return answer
+        async with aiohttp.ClientSession() as session:
+            response = await self.fetch(session, url() + "/chat/completions", headers=headers, data=data, method='POST')
+            try:
+                answer = response['choices'][0]['message']['content']
+                await self.msg("system", answer)
+                return answer
+            except:
+                return response
 
-    def draw(self, content):
+    async def draw(self, content):
         data = {
             "prompt": content,
             "n": 1,
@@ -56,26 +59,37 @@ class gpt:
             "Content-Type": "application/json",
             "Authorization": f'Bearer {key()}'
         }
-        response = requests.post(url() + "/images/generations", headers=headers, json=data)
-        if response.status_code != 200:
-            return json.loads(response.text)
-        elif response.status_code == 200:
-            answer = json.loads(response.text)['data'][0]['url']
-            return answer
+        async with aiohttp.ClientSession() as session:
+            response = await self.fetch(session, url() + "/images/generations", headers=headers, data=data, method='POST')
+            try:
+                answer = response['data'][0]['url']
+                return answer
+            except:
+                return response
 
-    def keyinfo(self):
+
+    async def keyinfo(self):
         apikey = key()
         subscription_url = url() + "/dashboard/billing/subscription"
         headers = {
             "Authorization": "Bearer " + apikey,
             "Content-Type": "application/json"
         }
-        subscription_response = requests.get(subscription_url, headers=headers)
-        if subscription_response.status_code == 200:
-            data = subscription_response.json()
-            total = data.get("hard_limit_usd")
-            access_until = data.get("access_until")
-            print("账户额度:" + str(total))
-            print("有效期:" + datetime.datetime.fromtimestamp(access_until).strftime('%Y-%m-%d %H:%M:%S'))
-        else:
-            print(subscription_response.text)
+        async with aiohttp.ClientSession() as session:
+            subscription_response = await self.fetch(session, subscription_url, headers=headers)
+            try:
+                if subscription_response['plan']['id']=="free":
+                    print("当前套餐：免费版")
+                    print("额度",subscription_response['hard_limit_usd'])
+            except:
+                print("error")
+
+    async def init(self):
+        if key() is None:
+            print("请先设置apikey")
+            return
+        await self.keyinfo()
+
+    async def clear(self):
+        self.messages = []
+
